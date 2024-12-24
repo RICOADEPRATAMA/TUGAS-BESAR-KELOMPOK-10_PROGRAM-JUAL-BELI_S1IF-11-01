@@ -118,7 +118,6 @@ func editItem(ID int, Nama string, Harga_Beli, Harga_Jual float64, Stock int) {
 }
 
 // Fungsi untuk menghapus Data Barang
-// Fungsi untuk menghapus Data Barang
 func deleteItem(ID int) {
 	for i := range items {
 		if items[i].ID == ID {
