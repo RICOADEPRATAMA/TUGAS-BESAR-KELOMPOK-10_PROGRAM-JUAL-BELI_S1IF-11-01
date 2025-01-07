@@ -9,7 +9,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -42,6 +41,12 @@ type History struct {
 	Date     time.Time
 }
 
+// Struktur untuk Top 5 Barang Terlaris
+type SoldItem struct {
+	ItemID    int
+	TotalSold int
+}
+
 // Daftar Data Barang yang tersedia
 var items = [10]Item{
 	{101, "Televisi", 1000000, 1500000, 15},
@@ -63,24 +68,28 @@ func formatPrice(price float64) string {
 
 // Fungsi untuk menambahkan Data Barang
 func addItem(ID int, Nama string, Harga_Beli, Harga_Jual float64, Stock int) {
-	for i := range items {
-		if Harga_Beli <= 0 || Harga_Jual <= 0 || Stock <= 0 {
-			fmt.Println("## Input Salah!! Harga beli, harga jual, dan stok harus lebih besar dari 0.")
+	for _, item := range items {
+		if item.ID == ID {
+			fmt.Printf("## Gagal menambahkan. ID %d sudah ada.\n", ID)
 			return
 		}
-		items[i] = Item{ID, Nama, Harga_Beli, Harga_Jual, Stock}
-		riwayat[historyCount] = History{
-			Action:   "add",
-			Category: "Data",
-			ItemID:   ID,
-			Details:  fmt.Sprintf("Nama: %s, Harga Beli: Rp%.2f, Harga Jual: Rp%.2f, Stok: %d", Nama, Harga_Beli, Harga_Jual, Stock),
-			Date:     time.Now(),
+	}
+	for i := range items {
+		if items[i].ID == 0 {
+			items[i] = Item{ID, Nama, Harga_Beli, Harga_Jual, Stock}
+			riwayat[historyCount] = History{
+				Action:   "add",
+				Category: "Data",
+				ItemID:   ID,
+				Details:  fmt.Sprintf("Nama: %s, Harga Beli: Rp%.2f, Harga Jual: Rp%.2f, Stok: %d", Nama, Harga_Beli, Harga_Jual, Stock),
+				Date:     time.Now(),
+			}
+			historyCount++
+			fmt.Printf("- %s (ID: %d, Harga Beli: Rp%.2f, Harga Jual: Rp%.2f, Stok: %d) pada %s\n",
+				Nama, ID, Harga_Beli, Harga_Jual, Stock, time.Now().Format("2006-01-02 15:04:05"))
+			fmt.Println("Data Barang berhasil ditambahkan.")
+			return
 		}
-		historyCount++
-		fmt.Printf("- %s (ID: %d, Harga Beli: Rp%.2f, Harga Jual: Rp%.2f, Stok: %d) pada %s\n",
-			Nama, ID, Harga_Beli, Harga_Jual, Stock, time.Now().Format("2006-01-02 15:04:05"))
-		fmt.Println("Data Barang berhasil ditambahkan.")
-		return
 	}
 	fmt.Println("## Tidak dapat menambahkan, kapasitas array penuh.")
 }
@@ -181,41 +190,52 @@ func addTransaction(itemID, quantity int) {
 	fmt.Println("## Data Barang dengan ID tersebut tidak ditemukan.")
 }
 
-// Fungsi untuk mengubah transaksi penjualan
+// Fungsi untuk mengedit transaksi
 func editTransaction(transactionIndex, newQuantity int) {
+	if transactionCount == 0 {
+		fmt.Println("## Tidak ada transaksi yang tersedia untuk diedit.")
+		return
+	}
 	if newQuantity <= 0 {
 		fmt.Println("## Input Salah!! Jumlah Data Barang yang dijual harus lebih besar dari 0.")
 		return
 	}
-	if transactionIndex >= 0 && transactionIndex < len(transactions) {
-		transaction := &transactions[transactionIndex]
-		for i := range items {
-			if items[i].ID == transaction.ItemID {
-				if items[i].Stock+transaction.Quantity < newQuantity {
-					fmt.Println("## Maaf, Stok tidak mencukupi!")
-					return
-				}
-				oldDetails := fmt.Sprintf("Jumlah: %d, Total Harga: Rp%.2f", transaction.Quantity, transaction.TotalPrice)
-				items[i].Stock = items[i].Stock + transaction.Quantity - newQuantity
-				transaction.Quantity = newQuantity
-				transaction.TotalPrice = float64(newQuantity) * items[i].Harga_Jual
-				riwayat[historyCount] = History{
-					Action:   "edit",
-					Category: "transaksi",
-					ItemID:   transaction.ItemID,
-					Details:  fmt.Sprintf("Old: %s | New: Jumlah: %d, Total Harga: Rp%.2f", oldDetails, newQuantity, transaction.TotalPrice),
-					Date:     time.Now(),
-				}
-				historyCount++
-				fmt.Printf("- %s (ID: %d, Jumlah: %d, Total Harga: Rp%.2f, Diedit pada: %s, Status: Berhasil)\n",
-					items[i].Name, items[i].ID, newQuantity, transaction.TotalPrice, time.Now().Format("2006-01-02 15:04:05"))
-				fmt.Println("Transaksi berhasil diperbarui.")
-				return
-			}
-		}
-	} else {
-		fmt.Println("## Data transaksi tidak bisa diedit, harus terjadi transaksi dulu.")
+	if transactionIndex < 0 || transactionIndex >= transactionCount {
+		fmt.Println("## Data transaksi tidak bisa diedit, indeks transaksi tidak ditemukan.")
+		return
 	}
+	transaction := &transactions[transactionIndex]
+	itemIndex := -1
+	for i, item := range items {
+		if item.ID == transaction.ItemID {
+			itemIndex = i
+			break
+		}
+	}
+	if itemIndex == -1 {
+		fmt.Println("## Data transaksi tidak bisa diedit, item tidak ditemukan.")
+		return
+	}
+	deltaQuantity := newQuantity - transaction.Quantity
+	if deltaQuantity > 0 && items[itemIndex].Stock < deltaQuantity {
+		fmt.Println("## Data transaksi tidak bisa diedit, stok tidak mencukupi.")
+		return
+	}
+	oldDetails := fmt.Sprintf("Jumlah: %d, Total Harga: Rp%.2f", transaction.Quantity, transaction.TotalPrice)
+	items[itemIndex].Stock = items[itemIndex].Stock + transaction.Quantity - newQuantity
+	transaction.Quantity = newQuantity
+	transaction.TotalPrice = float64(newQuantity) * items[itemIndex].Harga_Jual
+	riwayat[historyCount] = History{
+		Action:   "edit",
+		Category: "transaksi",
+		ItemID:   transaction.ItemID,
+		Details:  fmt.Sprintf("Old: %s | New: Jumlah: %d, Total Harga: Rp%.2f", oldDetails, newQuantity, transaction.TotalPrice),
+		Date:     time.Now(),
+	}
+	historyCount++
+	fmt.Printf("\n- %s (ID: %d, Jumlah: %d, Total Harga: Rp%.2f, Diedit pada: %s, Status: Berhasil)\n",
+		items[itemIndex].Name, items[itemIndex].ID, newQuantity, transaction.TotalPrice, time.Now().Format("2006-01-02 15:04:05"))
+	fmt.Println("Transaksi berhasil diperbarui.")
 }
 
 // Fungsi untuk menghapus transaksi penjualan
@@ -269,59 +289,54 @@ func sortItems(by, order string) {
 	switch by {
 	case "ID":
 		if order == "asc" {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].ID < items[j].ID
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].ID < items[:][j].ID })
 		} else {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].ID > items[j].ID
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].ID > items[:][j].ID })
 		}
 	case "Nama":
 		if order == "asc" {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Name < items[j].Name
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Name < items[:][j].Name })
 		} else {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Name > items[j].Name
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Name > items[:][j].Name })
 		}
 	case "Harga_Beli":
 		if order == "asc" {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Harga_Beli < items[j].Harga_Beli
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Harga_Beli < items[:][j].Harga_Beli })
 		} else {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Harga_Beli > items[j].Harga_Beli
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Harga_Beli > items[:][j].Harga_Beli })
 		}
 	case "Harga_Jual":
 		if order == "asc" {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Harga_Jual < items[j].Harga_Jual
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Harga_Jual < items[:][j].Harga_Jual })
 		} else {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Harga_Jual > items[j].Harga_Jual
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Harga_Jual > items[:][j].Harga_Jual })
 		}
 	case "Stock":
 		if order == "asc" {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Stock < items[j].Stock
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Stock < items[:][j].Stock })
 		} else {
-			sort.SliceStable(items, func(i, j int) bool {
-				return items[i].Stock > items[j].Stock
-			})
+			selectionSort(items[:], func(i, j int) bool { return items[:][i].Stock > items[:][j].Stock })
 		}
 	default:
 		fmt.Println("Kriteria urutkan tidak valid.")
 		return
 	}
 	displayItems()
+}
+
+// Fungsi Selection Sort
+func selectionSort(items []Item, compare func(i, j int) bool) {
+	for i := 0; i < len(items)-1; i++ {
+		minIndex := i
+		for j := i + 1; j < len(items); j++ {
+			if compare(j, minIndex) {
+				minIndex = j
+			}
+		}
+		if minIndex != i {
+			items[i], items[minIndex] = items[minIndex], items[i]
+		}
+	}
 }
 
 // Fungsi untuk mencari Data Barang berdasarkan kata kunci
@@ -369,30 +384,49 @@ func displayReport() {
 	fmt.Printf("Total Keuntungan : Rp %.2f\n", totalProfit)
 }
 
-// Fungsi untuk menampilkan 5 Barang yang paling banyak terjual
-func displayTopSoldItems() {
-	type SoldItem struct {
-		ItemID    int
-		TotalSold int
+// Fungsi untuk mengurutkan SoldItem berdasarkan TotalSold
+func sortSoldItemsDescending(items []SoldItem) {
+	for i := 0; i < len(items)-1; i++ {
+		maxIndex := i
+		for j := i + 1; j < len(items); j++ {
+			if items[j].TotalSold > items[maxIndex].TotalSold {
+				maxIndex = j
+			}
+		}
+		if maxIndex != i {
+			items[i], items[maxIndex] = items[maxIndex], items[i]
+		}
 	}
+}
+
+// Fungsi Top 5 Barang Terlaris
+func displayTopSoldItems() {
 	soldItemsMap := make(map[int]int)
 	for _, transaction := range transactions {
 		soldItemsMap[transaction.ItemID] += transaction.Quantity
 	}
-	var soldItems []SoldItem
+	var soldItems [10]SoldItem
+	count := 0
 	for itemID, totalSold := range soldItemsMap {
-		soldItems = append(soldItems, SoldItem{ItemID: itemID, TotalSold: totalSold})
+		if count < len(soldItems) {
+			soldItems[count] = SoldItem{ItemID: itemID, TotalSold: totalSold}
+			count++
+		}
 	}
-	sort.Slice(soldItems, func(i, j int) bool {
-		return soldItems[i].TotalSold > soldItems[j].TotalSold
-	})
+	sortSoldItemsDescending(soldItems[:count])
 	fmt.Println("TOP 5 Barang yang Paling Banyak Terjual:")
 	for i := 0; i < 5; i++ {
-		if i < len(soldItems) {
+		if i < count {
+			itemFound := false
 			for _, item := range items {
 				if soldItems[i].ItemID == item.ID {
 					fmt.Printf("%d. Nama Barang: %s, Terjual: %d\n", i+1, item.Name, soldItems[i].TotalSold)
+					itemFound = true
+					break
 				}
+			}
+			if !itemFound {
+				fmt.Printf("%d. Nama Barang: Tidak ditemukan, Terjual: %d\n", i+1, soldItems[i].TotalSold)
 			}
 		} else {
 			fmt.Printf("%d. Belum ada data\n", i+1)
@@ -406,12 +440,13 @@ func showHistory() {
 		fmt.Println("## Tidak ada riwayat tindakan.")
 		return
 	}
-
 	fmt.Println("### Riwayat Aksi:")
 	for _, history := range riwayat {
-		fmt.Printf("%s - %s: %s (ID: %d, %s) pada %s\n",
-			history.Date.Format("2006-01-02 15:04:05"), history.Action, history.Category,
-			history.ItemID, history.Details, history.Date.Format("2006-01-02 15:04:05"))
+		if history.Action != "" && !history.Date.IsZero() {
+			fmt.Printf("%s - %s: %s (ID: %d, %s) pada %s\n",
+				history.Date.Format("2006-01-02 15:04:05"), history.Action, history.Category,
+				history.ItemID, history.Details, history.Date.Format("2006-01-02 15:04:05"))
+		}
 	}
 }
 
@@ -522,7 +557,7 @@ func main() {
 		case "12":
 			showHistory()
 		case "13":
-			fmt.Println("Terima kasih telah menggunakan aplikasi ini! semoga berkah dan sukses selalu (*^‿^*)")
+			fmt.Println("Terima kasih telah menggunakan aplikasi ini! semoga berkah dan sukses selalu (^‿^)")
 			return
 		default:
 			fmt.Println("Pilihan tidak valid.")
